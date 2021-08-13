@@ -21,7 +21,9 @@ tqdm.pandas()
 
 torch.set_num_threads(4)
 
-CONDITION = 'default'
+#CONDITION = 'default'
+#CONDITION = 'init-seg_baseline'
+CONDITION = 'pred_baseline'
 
 if CONDITION == 'default':
     paule = grad_plan.Paule(device=torch.device('cpu'))
@@ -30,7 +32,12 @@ elif CONDITION == 'pred_baseline':
     pred_model = models.Non_Linear_Model(mode='pred', on_full_sequence=True).double()
     pred_model.load_state_dict(torch.load("../paule/paule/pretrained_models/baseline_nonlinear/non_linear_pred_model_fullseq_8192_lr_0001_50_00001_50_000001_50_0000001_200.pt", map_location=torch.device('cpu')))
     paule = grad_plan.Paule(pred_model=pred_model, device=torch.device('cpu'))
-    RESULT_DIR = 'results20210809_baseline_pred/'
+    RESULT_DIR = 'results20210813_baseline_pred/'
+elif CONDITION == 'init-seg_baseline':
+    pred_model = models.Non_Linear_Model(mode='pred', on_full_sequence=True).double()
+    pred_model.load_state_dict(torch.load("../paule/paule/pretrained_models/baseline_nonlinear/non_linear_pred_model_fullseq_8192_lr_0001_50_00001_50_000001_50_0000001_200.pt", map_location=torch.device('cpu')))
+    paule = grad_plan.Paule(pred_model=pred_model, device=torch.device('cpu'))
+    RESULT_DIR = 'results20210813_init-seg_baseline/'
 else:
     raise ValueError('condition is wrong')
 
@@ -64,7 +71,7 @@ planned_cps = list()
 inv_cps = list()
 prod_signals = list()
 prod_mels = list()
-for index, row in tqdm(dat.iterrows(), total=dat.shape[0]):
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='acoustic_acoustics'):
     target_sig = row['rec_sig'].copy()
     target_sig /= np.max(np.abs(target_sig))
     target_sig *= 0.1
@@ -106,7 +113,7 @@ dat['inv_mel'] = dat['inv_mel'] - dat['inv_mel_min']
 
 
 
-with open(os.path.join(RESULT_DIR, 'acoustic_results.pickle'), 'wb') as pfile:
+with open(os.path.join(RESULT_DIR, 'acoustics_acoustic_results.pickle'), 'wb') as pfile:
     pickle.dump(acoustic_results, pfile)
 
 
@@ -116,7 +123,7 @@ acoustic_semvec_results = list()
 planned_cps = list()
 prod_signals = list()
 prod_mels = list()
-for index, row in tqdm(dat.iterrows()):
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='acoustic_acoustic-semvec'):
     target_sig = row['rec_sig'].copy()
     target_sig /= np.max(np.abs(target_sig))
     target_sig *= 0.1
@@ -143,7 +150,7 @@ dat['planned_cp_acoustic-semvec'] = planned_cps
 dat['prod_sig_acoustic-semvec'] = prod_signals
 dat['prod_mel_acoustic-semvec'] = prod_mels
 
-with open(os.path.join(RESULT_DIR, 'acoustic_semvec_results.pickle'), 'wb') as pfile:
+with open(os.path.join(RESULT_DIR, 'acoustics_acoustic-semvec_results.pickle'), 'wb') as pfile:
     pickle.dump(acoustic_semvec_results, pfile)
 
 
@@ -153,7 +160,7 @@ semvec_results = list()
 planned_cps = list()
 prod_signals = list()
 prod_mels = list()
-for index, row in tqdm(dat.iterrows()):
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='acoustic_semvec'):
     target_sig = row['rec_sig'].copy()
     target_sig /= np.max(np.abs(target_sig))
     target_sig *= 0.1
@@ -180,7 +187,7 @@ dat['planned_cp_semvec'] = planned_cps
 dat['prod_sig_semvec'] = prod_signals
 dat['prod_mel_semvec'] = prod_mels
 
-with open(os.path.join(RESULT_DIR, 'semvec_results.pickle'), 'wb') as pfile:
+with open(os.path.join(RESULT_DIR, 'acoustics_semvec_results.pickle'), 'wb') as pfile:
     pickle.dump(semvec_results, pfile)
 
 dat.to_pickle(os.path.join(RESULT_DIR, 'dat_acoustics.pickle'))
@@ -210,7 +217,7 @@ planned_cps = list()
 inv_cps = list()
 prod_signals = list()
 prod_mels = list()
-for index, row in tqdm(dat.iterrows(), total=dat.shape[0]):
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='vector_acoustics-semvec'):
     target_seq_length = row['rec_mel'].shape[0]
     target_semvec = torch.tensor(row['vector'].copy()).view(1, 300)
     result = paule.plan_resynth(
@@ -257,7 +264,7 @@ planned_cps = list()
 inv_cps = list()
 prod_signals = list()
 prod_mels = list()
-for index, row in tqdm(dat.iterrows(), total=dat.shape[0]):
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='vector_acoustics'):
     target_seq_length = row['rec_mel'].shape[0]
     target_semvec = torch.tensor(row['vector'].copy()).view(1, 300)
     result = paule.plan_resynth(
@@ -294,7 +301,7 @@ planned_cps = list()
 inv_cps = list()
 prod_signals = list()
 prod_mels = list()
-for index, row in tqdm(dat.iterrows(), total=dat.shape[0]):
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='vector_semvec'):
     target_seq_length = row['rec_mel'].shape[0]
     target_semvec = torch.tensor(row['vector'].copy()).view(1, 300)
     result = paule.plan_resynth(
@@ -327,7 +334,151 @@ with open(os.path.join(RESULT_DIR, 'vector_semvec.pickle'), 'wb') as pfile:
 dat.to_pickle(os.path.join(RESULT_DIR, 'dat_vector.pickle'))
 
 
-# 3. "Wer ist eigentlich Paule?"
+# 3 Initialise with segment based cps
+
+
+# 3.1 only acoustic objective
+
+acoustic_results = list()
+planned_cps = list()
+inv_cps = list()
+prod_signals = list()
+prod_mels = list()
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='init-seg_acoustic'):
+    target_sig = row['rec_sig'].copy()
+    target_sig /= np.max(np.abs(target_sig))
+    target_sig *= 0.1
+    target_semvec = torch.tensor(row['vector'].copy()).view(1, 300)
+    inv_cp = row['seg_cp'].copy()
+    seg_padding = int((row['seg_cp'].shape[0] - row['rec_mel'].shape[0] * 2) / 2)
+    inv_cp = inv_cp[seg_padding:-seg_padding]
+    result = paule.plan_resynth(
+            target_acoustic=(target_sig, row['rec_sr']),
+            target_semvec=target_semvec,
+            inv_cp=inv_cp,
+            initialize_from=None,
+            objective="acoustic",
+            log_semantics=True, n_inner=N_INNER, n_outer=N_OUTER)
+    acoustic_results.append(result)
+    (planned_cp, inv_cp, target_sig, target_mel, prod_sig, prod_mel, pred_mel, loss_steps,
+            loss_mel_steps, loss_semvec_steps, loss_jerk_steps, loss_velocity_steps, loss_prod_steps) = result
+    planned_cps.append(planned_cp)
+    inv_cps.append(inv_cp)
+    prod_signals.append(prod_sig)
+    prod_mels.append(prod_mel)
+    print(f"last semvec loss: {loss_semvec_steps[-1]:.2e}; last mel loss: {loss_mel_steps[-1]:.2e}\n\n")
+
+
+dat['inv_cp'] = None
+dat['inv_cp'] = inv_cps
+
+dat['planned_cp_acoustic'] = None
+dat['prod_sig_acoustic'] = None
+dat['prod_mel_acoustic'] = None
+
+dat['planned_cp_acoustic'] = planned_cps
+dat['prod_sig_acoustic'] = prod_signals
+dat['prod_mel_acoustic'] = prod_mels
+
+
+# add inv synthesis
+dat['inv_sig'] = dat['inv_cp'].progress_apply(lambda cp: util.speak(util.inv_normalize_cp(cp))[0])
+dat['inv_sr'] = 44100
+dat['inv_mel'] = dat['inv_sig'].progress_apply(lambda sig: util.normalize_mel_librosa(util.librosa_melspec(sig, 44100)))  # WARNING this only works for synthesised audio as the sample rate is always 44100
+dat['inv_mel_min'] = dat['inv_mel'].apply(lambda mel: mel.min())
+dat['inv_mel'] = dat['inv_mel'] - dat['inv_mel_min']
+
+
+
+with open(os.path.join(RESULT_DIR, 'init-seg_acoustic_results.pickle'), 'wb') as pfile:
+    pickle.dump(acoustic_results, pfile)
+
+
+# 3.2 semantic and acoustic objective
+
+acoustic_semvec_results = list()
+planned_cps = list()
+prod_signals = list()
+prod_mels = list()
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='init-seg_acoustic-semvec'):
+    target_sig = row['rec_sig'].copy()
+    target_sig /= np.max(np.abs(target_sig))
+    target_sig *= 0.1
+    target_semvec = torch.tensor(row['vector'].copy()).view(1, 300)
+    inv_cp = row['seg_cp'].copy()
+    seg_padding = int((row['seg_cp'].shape[0] - row['rec_mel'].shape[0] * 2) / 2)
+    inv_cp = inv_cp[seg_padding:-seg_padding]
+    result = paule.plan_resynth(
+            target_acoustic=(target_sig, row['rec_sr']),
+            target_semvec=target_semvec,
+            inv_cp=inv_cp,
+            initialize_from=None,
+            objective="acoustic_semvec",
+            log_semantics=True, n_inner=N_INNER, n_outer=N_OUTER)
+    acoustic_semvec_results.append(result)
+    (planned_cp, inv_cp, target_sig, target_mel, prod_sig, prod_mel, pred_mel, loss_steps,
+            loss_mel_steps, loss_semvec_steps, loss_jerk_steps, loss_velocity_steps, loss_prod_steps) = result
+    planned_cps.append(planned_cp)
+    prod_signals.append(prod_sig)
+    prod_mels.append(prod_mel)
+    print(f"last semvec loss: {loss_semvec_steps[-1]:.2e}; last mel loss: {loss_mel_steps[-1]:.2e}")
+
+dat['planned_cp_acoustic-semvec'] = None
+dat['prod_sig_acoustic-semvec'] = None
+dat['prod_mel_acoustic-semvec'] = None
+
+dat['planned_cp_acoustic-semvec'] = planned_cps
+dat['prod_sig_acoustic-semvec'] = prod_signals
+dat['prod_mel_acoustic-semvec'] = prod_mels
+
+with open(os.path.join(RESULT_DIR, 'init-seg_acoustic-semvec_results.pickle'), 'wb') as pfile:
+    pickle.dump(acoustic_semvec_results, pfile)
+
+
+# 3.3 only semantic objective
+
+semvec_results = list()
+planned_cps = list()
+prod_signals = list()
+prod_mels = list()
+for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='init-seg_semvec'):
+    target_sig = row['rec_sig'].copy()
+    target_sig /= np.max(np.abs(target_sig))
+    target_sig *= 0.1
+    target_semvec = torch.tensor(row['vector'].copy()).view(1, 300)
+    inv_cp = row['seg_cp'].copy()
+    seg_padding = int((row['seg_cp'].shape[0] - row['rec_mel'].shape[0] * 2) / 2)
+    inv_cp = inv_cp[seg_padding:-seg_padding]
+    result = paule.plan_resynth(
+            target_acoustic=(target_sig, row['rec_sr']),
+            target_semvec=target_semvec,
+            inv_cp=inv_cp,
+            initialize_from=None,
+            objective="semvec",
+            log_semantics=True, n_inner=N_INNER, n_outer=N_OUTER)
+    semvec_results.append(result)
+    (planned_cp, inv_cp, target_sig, target_mel, prod_sig, prod_mel, pred_mel, loss_steps,
+            loss_mel_steps, loss_semvec_steps, loss_jerk_steps, loss_velocity_steps, loss_prod_steps) = result
+    planned_cps.append(planned_cp)
+    prod_signals.append(prod_sig)
+    prod_mels.append(prod_mel)
+    print(f"last semvec loss: {loss_semvec_steps[-1]:.2e}; last mel loss: {loss_mel_steps[-1]:.2e}")
+
+dat['planned_cp_semvec'] = None
+dat['prod_sig_semvec'] = None
+dat['prod_mel_semvec'] = None
+
+dat['planned_cp_semvec'] = planned_cps
+dat['prod_sig_semvec'] = prod_signals
+dat['prod_mel_semvec'] = prod_mels
+
+with open(os.path.join(RESULT_DIR, 'init-seg_semvec_results.pickle'), 'wb') as pfile:
+    pickle.dump(semvec_results, pfile)
+
+dat.to_pickle(os.path.join(RESULT_DIR, 'dat_init-seg.pickle'))
+
+
+# 4. "Wer ist eigentlich Paule?"
 
 
 
