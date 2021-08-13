@@ -116,6 +116,28 @@ dat['rmse_vec_acoustic-semvec'] = dat.apply(lambda row: rmse(row.vector, row['pr
 dat['rmse_vec_seg'] = dat.apply(lambda row: rmse(row.vector, row.seg_vec), axis=1)
 
 
+# correlations and rank of target word
+label_vectors = pd.read_pickle('data/label_vectors_vectors_checked.pkl')
+
+def rank(label, vector):
+    corr = np.array([np.correlate(vector, vec2) for vec2 in label_vectors['vector']])
+    return int(sp.stats.rankdata(-corr, method='min')[label_vectors.label == 'Problem'])
+
+dat['corr_vec_rec'] = dat.apply(lambda row: 1 - float(np.correlate(row.vector, row.rec_vec)), axis=1)
+dat['corr_vec_inv'] = dat.apply(lambda row: 1 - float(np.correlate(row.vector, row.inv_vec)), axis=1)
+dat['corr_vec_semvec'] = dat.apply(lambda row: 1 - float(np.correlate(row.vector, row.prod_vec_semvec)), axis=1)
+dat['corr_vec_acoustic'] = dat.apply(lambda row: 1 - float(np.correlate(row.vector, row.prod_vec_acoustic)), axis=1)
+dat['corr_vec_acoustic-semvec'] = dat.apply(lambda row: 1 - float(np.correlate(row.vector, row['prod_vec_acoustic-semvec'])), axis=1)
+dat['corr_vec_seg'] = dat.apply(lambda row: 1 - float(np.correlate(row.vector, row.seg_vec)), axis=1)
+
+dat['rank_vec_rec'] = dat.apply(lambda row: rank(row.label, row.rec_vec), axis=1)
+dat['rank_vec_inv'] = dat.apply(lambda row: rank(row.label, row.inv_vec), axis=1)
+dat['rank_vec_semvec'] = dat.apply(lambda row: rank(row.label, row.prod_vec_semvec), axis=1)
+dat['rank_vec_acoustic'] = dat.apply(lambda row: rank(row.label, row.prod_vec_acoustic), axis=1)
+dat['rank_vec_acoustic-semvec'] = dat.apply(lambda row: rank(row.label, row['prod_vec_acoustic-semvec']), axis=1)
+dat['rank_vec_seg'] = dat.apply(lambda row: rank(row.label, row.seg_vec), axis=1)
+
+
 
 
 dat.to_pickle(f'data/dat_human_recordings_metrics_{CONDITION}.pickle')
@@ -133,6 +155,8 @@ df = pd.DataFrame({
     'file': np.tile(dat['file'], 6),
     'group': np.repeat(['rec', 'inv', 'semvec', 'acoustic semvec', 'acoustic', 'segment'], 36),
     'rMSE loss between true and resynth semantic vectors': dat['rmse_vec_rec'].to_list() + dat['rmse_vec_inv'].to_list() + dat['rmse_vec_semvec'].to_list() + dat['rmse_vec_acoustic-semvec'].to_list() + dat['rmse_vec_acoustic'].to_list() + dat['rmse_vec_seg'].to_list(),
+    '1 - corr between true and resynth semantic vector': dat['corr_vec_rec'].to_list() + dat['corr_vec_inv'].to_list() + dat['corr_vec_semvec'].to_list() + dat['corr_vec_acoustic-semvec'].to_list() + dat['corr_vec_acoustic'].to_list() + dat['corr_vec_seg'].to_list(),
+    'rank of resynth semantic vector': dat['rank_vec_rec'].to_list() + dat['rank_vec_inv'].to_list() + dat['rank_vec_semvec'].to_list() + dat['rank_vec_acoustic-semvec'].to_list() + dat['rank_vec_acoustic'].to_list() + dat['rank_vec_seg'].to_list(),
     'rMSE loss between true and resynth acoustics': dat['rmse_mel_rec'].to_list() + dat['rmse_mel_inv'].to_list() + dat['rmse_mel_semvec'].to_list() + dat['rmse_mel_acoustic-semvec'].to_list() + dat['rmse_mel_acoustic'].to_list() + dat['rmse_mel_seg'].to_list()})
 
 
@@ -140,14 +164,25 @@ df = pd.DataFrame({
 
 # both plots in one figure
 plt.clf()
-f, (ax1, ax2) = plt.subplots(1,2, figsize=(15, 5))
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
 ort = "h"; pal = "Set2"; sigma = .2
 pt.RainCloud(x='group', y='rMSE loss between true and resynth acoustics', data=df, palette=pal, bw=sigma, width_viol=.6, ax=ax1, orient=ort, box_showfliers=False)
 pt.RainCloud(x='group', y='rMSE loss between true and resynth semantic vectors', data=df, palette=pal, bw=sigma, width_viol=.6, ax=ax2, orient=ort, box_showfliers=False)
 ax1.set_xlim((-0.0001, 0.5))
 ax2.set_xlim((-0.0001, 0.07))
-plt.savefig(f'plots/boxplots-1-2_{CONDITION}.png')
-plt.savefig(f'plots/boxplots-1-2_{CONDITION}.pdf')
+fig.savefig(f'plots/boxplots-rmse_{CONDITION}.pdf')
+
+
+plt.clf()
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+ort = "h"; pal = "Set2"; sigma = .2
+pt.RainCloud(x='group', y='1 - corr between true and resynth semantic vector', data=df, palette=pal, bw=sigma, width_viol=.6, ax=ax1, orient=ort, box_showfliers=False)
+pt.RainCloud(x='group', y='rank of resynth semantic vector', data=df, palette=pal, bw=sigma, width_viol=.6, ax=ax2, orient=ort, box_showfliers=False)
+ax1.set_xlim((-0.0001, 1.0))
+fig.savefig(f'plots/boxplots_corr-rank_{CONDITION}.pdf')
+
+
+
 
 
 # play all words
