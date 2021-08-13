@@ -5,17 +5,33 @@ import numpy as np
 
 from paule import models
 
+CONDITION = 'acoustic-default'
+#CONDITION = 'acoustic-baseline'
+#CONDITION = 'acoustic-init-seg'
+#CONDITION = 'semantic-default'
+
 #embedder = models.MelEmbeddingModel_MelSmoothResidualUpsampling(mel_smooth_layers=3).double()
 #embedder.load_state_dict(torch.load("/home/tino/Documents/phd/projects/paule/paule/pretrained_models/embedder/model_recorded_embed_model_3_4_180_8192_rmse_lr_00001_400.pt", map_location=torch.device('cpu')))
 
 paule = grad_plan.Paule()
 
-#dat = pd.read_pickle('results20210809_baseline_pred/dat_acoustics.pickle')
-dat = pd.read_pickle('results20210805_marser/dat_acoustics.pickle')
 
-dat['prod_sig_acoustic'] = dat['prod_sig_nosemvec']
-dat['prod_mel_acoustic'] = dat['prod_mel_nosemvec']
-dat['planned_cp_acoustic'] = dat['planned_cp_nosemvec']
+if CONDITION == 'acoustic-baseline':
+    dat = pd.read_pickle('results20210809_baseline_pred/dat_acoustics.pickle')
+elif CONDITION == 'acoustic-default':
+    dat = pd.read_pickle('results20210809/dat_acoustics.pickle')
+elif CONDITION == 'acoustic-init-seg':
+    pass
+elif CONDITION == 'semantic-default':
+    pass
+else:
+    raise ValueError(f"unkown condition {CONDITION}")
+
+# rename legacy columns
+if 'prod_sig_nosemvec' in dat.columns:
+    dat['prod_sig_acoustic'] = dat['prod_sig_nosemvec']
+    dat['prod_mel_acoustic'] = dat['prod_mel_nosemvec']
+    dat['planned_cp_acoustic'] = dat['planned_cp_nosemvec']
 
 dat['rec_vec'] = None
 dat['seg_vec'] = None
@@ -78,9 +94,13 @@ dat['rmse_mel_acoustic'] = dat.apply(lambda row: rmse(row.rec_mel, row.prod_mel_
 dat['rmse_mel_acoustic-semvec'] = dat.apply(lambda row: rmse(row.rec_mel, row['prod_mel_acoustic-semvec']), axis=1)
 
 def rmse_mel_seg(row):
-    mel1 = row.rec_mel
-    mel2 = row.seg_mel[:mel1.shape[0],:]
-    return np.mean((mel1 - mel2) ** 2)
+    rec_mel = row.rec_mel
+    seg_mel = row.seg_mel
+    half_shift = int((seg_mel.shape[0] - rec_mel.shape[0]) / 2)
+    seg_mel = seg_mel[half_shift:-half_shift]
+    if rec_mel.shape[0] < seg_mel.shape[0]:
+        seg_mel = seg_mel[:rec_mel.shape[0]]
+    return rmse(seg_mel, rec_mel)
 
 dat['rmse_mel_seg'] = dat.apply(rmse_mel_seg, axis=1)
 
@@ -95,7 +115,10 @@ dat['rmse_vec_acoustic'] = dat.apply(lambda row: rmse(row.vector, row.prod_vec_a
 dat['rmse_vec_acoustic-semvec'] = dat.apply(lambda row: rmse(row.vector, row['prod_vec_acoustic-semvec']), axis=1)
 dat['rmse_vec_seg'] = dat.apply(lambda row: rmse(row.vector, row.seg_vec), axis=1)
 
-dat.to_pickle('dat_human_recordings_results.pkl')
+
+
+
+dat.to_pickle(f'data/dat_human_recordings_metrics_{CONDITION}.pickle')
 
 
 
@@ -104,11 +127,11 @@ import matplotlib.pyplot as plt
 import ptitprince as pt
 import numpy as np 
 import pandas as pd
-dat = pd.read_pickle('dat_human_recordings_results.pkl')
+dat = pd.read_pickle(f'data/dat_human_recordings_metrics_{CONDITION}.pickle')
 
 df = pd.DataFrame({
     'file': np.tile(dat['file'], 6),
-    'group': np.repeat(['rec', 'inv', 'semvec', 'semvec acoustic', 'acoustic', 'segment'], 36),
+    'group': np.repeat(['rec', 'inv', 'semvec', 'acoustic semvec', 'acoustic', 'segment'], 36),
     'rMSE loss between true and resynth semantic vectors': dat['rmse_vec_rec'].to_list() + dat['rmse_vec_inv'].to_list() + dat['rmse_vec_semvec'].to_list() + dat['rmse_vec_acoustic-semvec'].to_list() + dat['rmse_vec_acoustic'].to_list() + dat['rmse_vec_seg'].to_list(),
     'rMSE loss between true and resynth acoustics': dat['rmse_mel_rec'].to_list() + dat['rmse_mel_inv'].to_list() + dat['rmse_mel_semvec'].to_list() + dat['rmse_mel_acoustic-semvec'].to_list() + dat['rmse_mel_acoustic'].to_list() + dat['rmse_mel_seg'].to_list()})
 
@@ -121,9 +144,27 @@ f, (ax1, ax2) = plt.subplots(1,2, figsize=(15, 5))
 ort = "h"; pal = "Set2"; sigma = .2
 pt.RainCloud(x='group', y='rMSE loss between true and resynth acoustics', data=df, palette=pal, bw=sigma, width_viol=.6, ax=ax1, orient=ort, box_showfliers=False)
 pt.RainCloud(x='group', y='rMSE loss between true and resynth semantic vectors', data=df, palette=pal, bw=sigma, width_viol=.6, ax=ax2, orient=ort, box_showfliers=False)
-#ax2.set_xlim((-0.0001, 0.004))
-plt.savefig('boxplots-1-2-noxlim.png')
-plt.savefig('boxplots-1-2-noxlim.pdf')
+ax1.set_xlim((-0.0001, 0.5))
+ax2.set_xlim((-0.0001, 0.07))
+plt.savefig(f'plots/boxplots-1-2_{CONDITION}.png')
+plt.savefig(f'plots/boxplots-1-2_{CONDITION}.pdf')
 
+
+# play all words
+
+import sounddevice as sd
+import time
+
+print(f"condition: {CONDITION}")
+for index, row in dat.iterrows():
+    print(f"{row['label']} (inv, planned acoustic-semvec, rec, seg)")
+    sd.play(row['inv_sig'] * 4, row['inv_sr'], blocking=True)
+    time.sleep(0.1)
+    sd.play(row['prod_sig_acoustic-semvec'] * 4, 44100, blocking=True)
+    time.sleep(0.1)
+    sd.play(row['rec_sig'], row['rec_sr'], blocking=True)
+    time.sleep(0.1)
+    sd.play(row['seg_sig'], row['seg_sr'], blocking=True)
+    time.sleep(0.5)
 
 
