@@ -8,6 +8,7 @@ recording.
 
 import pickle
 import os
+import time
 
 import pandas as pd
 from tqdm import tqdm
@@ -19,47 +20,69 @@ import numpy as np
 
 tqdm.pandas()
 
-torch.set_num_threads(4)
+torch.set_num_threads(8)
 
 #CONDITION = 'default'
 #CONDITION = 'init-seg_baseline'
-CONDITION = 'pred_baseline'
+#CONDITION = 'pred_baseline'
+#CONDITION = 'baseline_segment-embedder'
+CONDITION = 'segment-embedder'
 
 if CONDITION == 'default':
     paule = grad_plan.Paule(device=torch.device('cpu'))
-    RESULT_DIR = 'results20210811_vector/'
 elif CONDITION == 'pred_baseline':
     pred_model = models.Non_Linear_Model(mode='pred', on_full_sequence=True).double()
     pred_model.load_state_dict(torch.load("../paule/paule/pretrained_models/baseline_nonlinear/non_linear_pred_model_fullseq_8192_lr_0001_50_00001_50_000001_50_0000001_200.pt", map_location=torch.device('cpu')))
     paule = grad_plan.Paule(pred_model=pred_model, device=torch.device('cpu'))
-    RESULT_DIR = 'results20210813_baseline_pred/'
 elif CONDITION == 'init-seg_baseline':
     pred_model = models.Non_Linear_Model(mode='pred', on_full_sequence=True).double()
     pred_model.load_state_dict(torch.load("../paule/paule/pretrained_models/baseline_nonlinear/non_linear_pred_model_fullseq_8192_lr_0001_50_00001_50_000001_50_0000001_200.pt", map_location=torch.device('cpu')))
     paule = grad_plan.Paule(pred_model=pred_model, device=torch.device('cpu'))
-    RESULT_DIR = 'results20210813_init-seg_baseline/'
+elif CONDITION == 'baseline_segment-embedder':
+    pred_model = models.Non_Linear_Model(mode='pred', on_full_sequence=True).double()
+    pred_model.load_state_dict(torch.load("../paule/paule/pretrained_models/baseline_nonlinear/non_linear_pred_model_fullseq_8192_lr_0001_50_00001_50_000001_50_0000001_200.pt", map_location=torch.device('cpu')))
+    embedder = models.MelEmbeddingModel_MelSmoothResidualUpsampling(mel_smooth_layers=3).double()
+    embedder.load_state_dict(torch.load("../paule/paule/pretrained_models/embedder/model_synthesized_embed_model_3_4_180_8192_rmse_lr_00001_400.pt", map_location=torch.device('cpu')))
+    paule = grad_plan.Paule(pred_model=pred_model, embedder=embedder, device=torch.device('cpu'))
+elif CONDITION == 'segment-embedder':
+    embedder = models.MelEmbeddingModel_MelSmoothResidualUpsampling(mel_smooth_layers=3).double()
+    embedder.load_state_dict(torch.load("../paule/paule/pretrained_models/embedder/model_synthesized_embed_model_3_4_180_8192_rmse_lr_00001_400.pt", map_location=torch.device('cpu')))
+    paule = grad_plan.Paule(embedder=embedder, device=torch.device('cpu'))
 else:
     raise ValueError('condition is wrong')
 
+RESULT_DIR = f'results_{time.strftime("%Y%m%d")}_{CONDITION}/'
+
 os.mkdir(RESULT_DIR)
 
-dat = pd.read_pickle('data/human_recordings.pickle')
+dat = pd.read_pickle('data/geco_df_test_final_subset.pkl')
+
 N_INNER = 100
 N_OUTER = 40 
 
 ## for testing run it on the first two
-#dat = dat[:2]
 #dat = dat[3:5]
+dat = dat.iloc[[90, 100, 120]]
 #N_INNER = 20 
 #N_OUTER = 2
 
-
-# add segment synthesis
-dat['seg_sig'] = dat['seg_cp'].progress_apply(lambda cp: util.speak(util.inv_normalize_cp(cp))[0])
-dat['seg_sr'] = 44100
-dat['seg_mel'] = dat['seg_sig'].progress_apply(lambda sig: util.normalize_mel_librosa(util.librosa_melspec(sig, 44100)))  # WARNING this only works for synthesised audio as the sample rate is always 44100
-dat['seg_mel_min'] = dat['seg_mel'].apply(lambda mel: mel.min())
-dat['seg_mel'] = dat['seg_mel'] - dat['seg_mel_min']
+if 'total_count_train_valid' in dat.columns:
+    dat_raw = dat
+    dat = dat_raw[['label', 'file_rec',
+        'vector',
+        'wav_rec', 'sampling_rate_rec', 'melspec_norm_rec', 'melspec_norm_min_rec',
+        'cp_norm',
+        'wav_syn', 'sampling_rate_syn', 'melspec_norm_syn', 'melspec_norm_min_syn']]
+    dat.columns = ['label', 'file', 'vector', 'rec_sig', 'rec_sr',
+       'rec_mel', 'rec_mel_min', 'seg_cp', 'seg_sig', 'seg_sr', 'seg_mel',
+       'seg_mel_min']
+else:
+    # add segment synthesis
+    dat['seg_sig'] = dat['seg_cp'].progress_apply(lambda cp: util.speak(util.inv_normalize_cp(cp))[0])
+    dat['seg_sr'] = 44100
+    dat['seg_mel'] = dat['seg_sig'].progress_apply(lambda sig: util.normalize_mel_librosa(util.librosa_melspec(sig, 44100)))  # WARNING this only works for synthesised audio as the sample rate is always 44100
+    dat['seg_mel_min'] = dat['seg_mel'].apply(lambda mel: mel.min())
+    dat['seg_mel'] = dat['seg_mel'] - dat['seg_mel_min']
 
 
 # 1. Acoustic resynthesis
@@ -123,6 +146,7 @@ acoustic_semvec_results = list()
 planned_cps = list()
 prod_signals = list()
 prod_mels = list()
+inv_cps = list()
 for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='acoustic_acoustic-semvec'):
     target_sig = row['rec_sig'].copy()
     target_sig /= np.max(np.abs(target_sig))
@@ -140,6 +164,7 @@ for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='acoustic_acoust
     planned_cps.append(planned_cp)
     prod_signals.append(prod_sig)
     prod_mels.append(prod_mel)
+    inv_cps.append(inv_cp)
     print(f"last semvec loss: {loss_semvec_steps[-1]:.2e}; last mel loss: {loss_mel_steps[-1]:.2e}")
 
 dat['planned_cp_acoustic-semvec'] = None
@@ -160,6 +185,7 @@ semvec_results = list()
 planned_cps = list()
 prod_signals = list()
 prod_mels = list()
+inv_cps = list()
 for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='acoustic_semvec'):
     target_sig = row['rec_sig'].copy()
     target_sig /= np.max(np.abs(target_sig))
@@ -177,6 +203,7 @@ for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='acoustic_semvec
     planned_cps.append(planned_cp)
     prod_signals.append(prod_sig)
     prod_mels.append(prod_mel)
+    inv_cps.append(inv_cp)
     print(f"last semvec loss: {loss_semvec_steps[-1]:.2e}; last mel loss: {loss_mel_steps[-1]:.2e}")
 
 dat['planned_cp_semvec'] = None
@@ -400,6 +427,7 @@ acoustic_semvec_results = list()
 planned_cps = list()
 prod_signals = list()
 prod_mels = list()
+inv_cps = list()
 for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='init-seg_acoustic-semvec'):
     target_sig = row['rec_sig'].copy()
     target_sig /= np.max(np.abs(target_sig))
@@ -421,6 +449,7 @@ for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='init-seg_acoust
     planned_cps.append(planned_cp)
     prod_signals.append(prod_sig)
     prod_mels.append(prod_mel)
+    inv_cps.append(inv_cp)
     print(f"last semvec loss: {loss_semvec_steps[-1]:.2e}; last mel loss: {loss_mel_steps[-1]:.2e}")
 
 dat['planned_cp_acoustic-semvec'] = None
@@ -441,6 +470,7 @@ semvec_results = list()
 planned_cps = list()
 prod_signals = list()
 prod_mels = list()
+inv_cps = list()
 for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='init-seg_semvec'):
     target_sig = row['rec_sig'].copy()
     target_sig /= np.max(np.abs(target_sig))
@@ -462,6 +492,7 @@ for index, row in tqdm(dat.iterrows(), total=dat.shape[0], desc='init-seg_semvec
     planned_cps.append(planned_cp)
     prod_signals.append(prod_sig)
     prod_mels.append(prod_mel)
+    inv_cps.append(inv_cp)
     print(f"last semvec loss: {loss_semvec_steps[-1]:.2e}; last mel loss: {loss_mel_steps[-1]:.2e}")
 
 dat['planned_cp_semvec'] = None
@@ -479,6 +510,5 @@ dat.to_pickle(os.path.join(RESULT_DIR, 'dat_init-seg.pickle'))
 
 
 # 4. "Wer ist eigentlich Paule?"
-
 
 
