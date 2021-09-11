@@ -20,13 +20,13 @@ import numpy as np
 
 tqdm.pandas()
 
-torch.set_num_threads(8)
+torch.set_num_threads(4)
 
-#CONDITION = 'default'
+CONDITION = 'default'
 #CONDITION = 'init-seg_baseline'
 #CONDITION = 'pred_baseline'
 #CONDITION = 'baseline_segment-embedder'
-CONDITION = 'segment-embedder'
+#CONDITION = 'segment-embedder'
 
 if CONDITION == 'default':
     paule = grad_plan.Paule(device=torch.device('cpu'))
@@ -60,6 +60,7 @@ dat = pd.read_pickle('data/geco_df_test_final_subset.pkl')
 N_INNER = 100
 N_OUTER = 40 
 
+dat = dat[-35:]
 ## for testing run it on the first two
 #dat = dat[3:5]
 dat = dat.iloc[[90, 100, 120]]

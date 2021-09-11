@@ -1,8 +1,7 @@
 """
-The human recordings benchmark compares the resynthesis quality for a small set
-of words (Problem, Studium, Wissenschaft, Liebe, genau, Klasse for now) between
-the recovering of the segment based synthesis and the resynthesis of the human
-recording.
+Experiment for Paul's master thesis.
+
+paule package commit bd75421512711e873addb5062ee0bcfe74f01802
 
 """
 
@@ -35,7 +34,10 @@ RESULT_DIR = f'results_{time.strftime("%Y%m%d_%H%M")}_masterarbeit_paul/'
 os.mkdir(RESULT_DIR)
 
 dat = pd.read_pickle('data/geco_df_test_final_subset.pkl')
-dat = dat.iloc[-35:]
+# shape == (121, 20)
+#dat = dat.iloc[:40]
+dat = dat.iloc[40:-35]
+#dat = dat.iloc[-35:]  # with log_semantics == False
 N_INNER = 100
 N_OUTER = 20
 
@@ -85,7 +87,7 @@ for init in INITIALIZES:
                     inv_cp=inv_cp,
                     initialize_from=initialize_from,
                     objective=objective,
-                    log_semantics=False, n_inner=N_INNER, n_outer=N_OUTER,
+                    log_semantics=True, n_inner=N_INNER, n_outer=N_OUTER,
                     verbose=False)
             results.append(result)
             (planned_cp, inv_cp, target_sig, target_mel, prod_sig, prod_mel, pred_mel, loss_steps,
