@@ -187,6 +187,7 @@ for dat in dats.values():
 
 import matplotlib.pyplot as plt
 import ptitprince as pt
+import seaborn as sns
 import numpy as np 
 import pandas as pd
 
@@ -202,6 +203,22 @@ for objective, dat in dats.items():
         'rank of resynth semantic vector': dat['rank_vec_rec'].to_list() + dat['rank_vec_inv'].to_list() + dat['rank_vec_semvec'].to_list() + dat['rank_vec_acoustic_semvec'].to_list() + dat['rank_vec_acoustic'].to_list() + dat['rank_vec_seg'].to_list(),
         'rMSE loss between true and resynth acoustics': dat['rmse_mel_rec'].to_list() + dat['rmse_mel_inv'].to_list() + dat['rmse_mel_semvec'].to_list() + dat['rmse_mel_acoustic_semvec'].to_list() + dat['rmse_mel_acoustic'].to_list() + dat['rmse_mel_seg'].to_list(),
         'Wasserstein Distance between true and resynth acoustics': dat['wasser_mel_rec'].to_list() + dat['wasser_mel_inv'].to_list() + dat['wasser_mel_semvec'].to_list() + dat['wasser_mel_acoustic_semvec'].to_list() + dat['wasser_mel_acoustic'].to_list() + dat['wasser_mel_seg'].to_list()})
+
+    # plot a bar chart
+    plt.figure(figsize=(14, 8))
+    ax = sns.barplot(x="group", y="rMSE loss between true and resynth acoustics", data=df[df.group.str.contains('inv|acoustic|acoustc_semvec|semvec')], estimator=np.mean, ci=95, capsize=.2, color='lightblue')
+    ax.set_title(f'{objective}')
+    #ax.set_ylim((0.16, 0.185))
+    plt.savefig(f'plots/masterthesis_paul_{objective}_mean_acoustic.pdf')
+
+    # plot a bar chart
+    plt.figure(figsize=(14, 8))
+    ax = sns.barplot(x="group", y="rMSE loss between true and resynth semantic vector", data=df[df.group.str.contains('inv|acoustic|acoustc_semvec|semvec')], estimator=np.mean, ci=95, capsize=.2, color='lightblue')
+    ax.set_title(f'{objective}')
+    #ax.set_ylim((0.16, 0.185))
+    plt.savefig(f'plots/masterthesis_paul_{objective}_mean_semvec.pdf')
+
+
 
     # plots including all data points ----
 
@@ -232,6 +249,12 @@ for objective, dat in dats.items():
     #ax1.set_xlim((-0.0001, 0.3))
     #ax2.set_xlim((-0.0001, 0.07))
     fig.savefig(f'plots/masterthesis_paul_{objective}_wasserstein.pdf')
+
+
+# small t-tests
+rvs1 = df[df.group == 'acoustic semvec']['rMSE loss between true and resynth acoustics']
+rvs2 = df[df.group == 'inv']['rMSE loss between true and resynth acoustics']
+sp.stats.ttest_rel(rvs1, rvs2)
 
 
 
